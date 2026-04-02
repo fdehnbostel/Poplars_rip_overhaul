@@ -21,10 +21,25 @@ def hamming(bin_fasta):
     for h, s in bin_fasta.items():
         result = []
         for nt1, nt2 in zip(query, s):
-            if (nt1 | nt2) & 0B1111:
+            # append None if comparison of nt1 and nt2 are not evaluable, e.g. ambiguous characters or gaps
+            # 
+            # bool(nt1 & nt2):         if ambiguous 'anti-NT'(B,D,H,V) and corresponding NT co-occur returns False, otherwise True (not evaluable)
+            #                          if ambiguous 3-possible-NT(R,Y,S,W,K,M) and NT not covered by it co-occur returns False, otherwise True (not evalauble)
+            #                          if two different NTs co-occur returns False, otherwise True (bool(nt1 ^ nt2) is used to alleviate this)
+            #                          if nt1 or nt2 is an N returns True (not evaluable), otherwise False
+            #                          if nt1 or nt2 is a gap ('-') returns False ( (not nt1) | (not nt2) is used to alleviate this)
+            #
+            # bool(nt1 ^ nt2)):        if nt1 and nt2 are equal returns False, else True (used to ensure that co-occurence of same NTs do not trigger None)
+            #
+            # ((not nt1) | (not nt2)): if nt1 or nt2 is a gap ('-') returns True, else False (used to ensure that a gap character leads triggers None)
+            if (bool(nt1 & nt2) & bool(nt1 ^ nt2)) | ((not nt1) | (not nt2)):
                 result.append(None)
                 continue
-            result.append(bin(nt1 ^ nt2))
+            # return 1 if mismatch
+            # return 0 is match
+            # length corresponds to length of evaluable positions
+            # used to calculate p-distance of sequences within window
+            result.append(int(nt1!=nt2))
         results.update({h: result})
 
     return results
