@@ -712,22 +712,23 @@ def main():
     
     args = parse_args() 
     
+    curr_path = os.path.dirname(os.path.abspath(__file__))
+    
     if args.custombg:
         ref_seq = args.custombg.name
     else:
         ref_seq_filename = 'HIV1_RIP_2023_genome_DNA_Mgroup_CONSandRegularIfNoCon_withNOP_noRecombinants.fasta'
         #ref_seq = os.path.join(os.getcwd(),'ref_genomes',ref_seq_filename)
         
-        seq_path = os.path.dirname(os.path.abspath(__file__))
-        ref_seq = os.path.join(seq_path,'ref_genomes',ref_seq_filename)
+        ref_seq = os.path.join(curr_path,'ref_genomes',ref_seq_filename)
                 
     with open(ref_seq) as handle:
         reference = convert_fasta(handle)
     
     # reading fasta input sequences file
     ## change infile
-    infile = os.path.join(os.getcwd(),os.pardir,os.pardir,'Data',
-                                     'PANGEA-HIV','sequences',args.infile)
+    infile = os.path.join(curr_path,os.pardir,os.pardir,'Data',
+                          'PANGEA-HIV','sequences',args.infile)
     handle = open(infile, 'r')
     
     fasta = convert_fasta(handle)
@@ -741,7 +742,7 @@ def main():
     ####
     
     # define metadata filepath
-    metadata_filepath = os.path.join(os.getcwd(),os.pardir,os.pardir,'Data',
+    metadata_filepath = os.path.join(curr_path,os.pardir,os.pardir,'Data',
                                      'PANGEA-HIV','metadata')
     # get metadata for PANGEA sequences                    
     country,partner,status,date,old_labels = fetch_metadata(args.infile,metadata_filepath,ids)
