@@ -560,7 +560,130 @@ def create_report(query_name,results,alignment,window=400,step=1,conf_thresh=0.7
     
     return(bm,bm_cov,bm_al_cov,bm_bs,om,om_cov,om_al_cov,om_bs)         
             
-
+def fetch_metadata(infile,metadata_filepath,ids):
+    # fetch id for pangea data, test
+    # collect data from metadata tsv file to 
+    # write to updated/relabeled metadata file
+    country = []
+    partner = []
+    status = []
+    date = []
+    old_labels = []
+    corr_count = 0
+    
+    # define metadata file and path 
+    metadata_file = f'{infile.split("_sequences")[0]}_metadata.tsv'
+    # define path to metadata
+    metadata_filepath = os.path.join(os.getcwd(),os.pardir,os.pardir,'Data',
+                                     'PANGEA-HIV','metadata')
+    with open(os.path.join(metadata_filepath,metadata_file),'r') as metafile:
+        lines = metafile.readlines()
+        for i,line in enumerate(lines[1:])
+        #for i,line in enumerate(lines[1:11]):
+            line_split = line.split('\t')
+            country.append(line_split[1]) 
+            partner.append(line_split[2])
+            old_labels.append(line_split[3])
+            status.append(line_split[4])
+            date.append(line_split[5].replace('\n',''))
+            if line_split[0] == ids[i]:
+                ids[i] = f'{line_split[3]}.{ids[i]}'
+                corr_count += 1
+    print(f'corr_count:{corr_count}, sample_size:{len(ids)}' ) 
+    return(country,partner,status,date,old_labels)   
+    
+def relabel(sequences,ids,alignments,results,window):
+        
+    # define pure subtypes
+    pure_subtypes = ['A1','A2','A3','A4','A5','A6','A7','A8',
+                     'B','C','D','F1','F2','G','H','J','K','L',
+                     'N','O','P']
+    
+    
+    # define auxiliary variables
+    new_labels = []
+    found_labels = []
+    coverage = []
+    bootstrap = []
+    alignment_coverage = []
+    seq_counter = 0
+    start_report = time.time()
+    
+    # variables to keep track of 'true' 
+    # and 'false' found subtypes
+    true_subtype_counter = 0
+    false_subtype_counter = 0
+    true_recombinant_counter = 0
+    false_recombinant_counter = 0
+    
+    # 
+    for s,h,alignment,result in zip(sequences,ids,alignments,results):
+        # get original subtype of sample
+        sample_subtype = h.split(".")[0]
+        # create report: get best
+        bm,bm_cov,bm_al_cov,bm_bs,om,om_cov,om_al_cov,om_bs = create_report(h,result,alignment,window=window) 
+        # if instance is labeled as recombinant
+        # keep label -> RIPlike not suited for exact recombinant detection 
+        if sample_subtype not in pure_subtypes:
+            new_labels.append(sample_subtype)
+            found_labels.append(','.join([bm]+om))
+            #
+            coverage.append(','.join([str(omc) for omc in om_cov]))
+            bootstrap.append(','.join([str(ombs) for ombs in om_bs]))
+            alignment_coverage.append(','.join([str(omac) for omac in om_al_cov]))
+        else:
+            # if major match was found, add new label
+            if bm:
+                new_labels.append(bm) 
+                found_labels.append(','.join([bm]+om))   
+                # add coverage and bootstrap support
+                coverage.append(bm_cov)
+                bootstrap.append(bm_bs)
+                alignment_coverage.append(bm_al_cov)
+            # else add found subtypes
+            else:
+                #
+                #new_labels.append(','.join(om))
+                ####
+                new_labels.append('_'.join(om))
+                ####
+                found_labels.append(','.join(om))
+                coverage.append(','.join([str(omc) for omc in om_cov]))
+                bootstrap.append(','.join([str(ombs) for ombs in om_bs]))
+                alignment_coverage.append(','.join([str(omac) for omac in om_al_cov]))
+                
+        if sample_subtype in pure_subtypes:
+            if bm:
+                print(f'Best match: {bm}, Subtype: {sample_subtype}')
+                print('True subtype')
+                true_subtype_counter += 1
+            else:
+                print(f'other_matches: {om}, Recombinant: {sample_subtype}')
+                print('False subtype')
+                false_subtype_counter += 1
+        else:
+            if bm:
+                print(f'Best match: {bm}, Subtype: {sample_subtype}')
+                print('False recombinant')
+                false_recombinant_counter += 1
+            else:
+                print(f'other_matches: {om}, Recombinant: {sample_subtype}')
+                print('True recombinant')
+                true_recombinant_counter += 1
+        seq_counter += 1
+        print('====================================\n\n\n')  
+        if seq_counter % 10 == 0:
+            print('################################')
+            print(f'True Subtypes  {true_subtype_counter} of {true_subtype_counter+false_subtype_counter}')
+            print(f'True Recombinants  {true_recombinant_counter} of {true_recombinant_counter+false_recombinant_counter}')
+            print(f'check: {true_subtype_counter+false_recombinant_counter+false_subtype_counter+true_recombinant_counter} / {seq_counter}')
+            print('################################\n\n')     
+        #######
+    end_report = time.time()
+    
+    print('Report time: ',end_report-start_report)
+    
+    return(new_labels,found_labels,coverage,bootstrap,alignment_coverage)
 
 def main():
     parser = argparse.ArgumentParser(
@@ -604,43 +727,15 @@ def main():
     ids = [tup[0] for tup in fasta]
     
     ####
-    sequences = sequences[:10]
-    ids = ids[:10]
+    #sequences = sequences[:10]
+    #ids = ids[:10]
     ####
     
-    # fetch id for pangea data, test
-    # collect data from metadata tsv file to 
-    # write to updated/relabeled metadata file
-    country = []
-    partner = []
-    status = []
-    date = []
-    old_labels = []
-    
-    #
-    corr_count = 0
-    #
-    
-    # define metadata file and path 
-    metadata_file = f'{args.infile.split("_sequences")[0]}_metadata.tsv'
-    # define path to metadata
+    # define metadata filepath
     metadata_filepath = os.path.join(os.getcwd(),os.pardir,os.pardir,'Data',
                                      'PANGEA-HIV','metadata')
-    with open(os.path.join(metadata_filepath,metadata_file),'r') as metafile:
-        lines = metafile.readlines()
-        for i,line in enumerate(lines[1:11]):
-        #for i,line in enumerate(lines[1:]):
-            line_split = line.split('\t')
-            country.append(line_split[1]) 
-            partner.append(line_split[2])
-            old_labels.append(line_split[3])
-            status.append(line_split[4])
-            date.append(line_split[5].replace('\n',''))
-            if line_split[0] == ids[i]:
-                ids[i] = f'{line_split[3]}.{ids[i]}'
-                corr_count += 1
-    print(f'corr_count:{corr_count}, sample_size:{len(sequences)}' ) 
-    ####
+    # get metadata for PANGEA sequences                    
+    country,partner,status,date,old_labels = fetch_metadata(args.infile,metadata_filepath,ids)
     
     # set up tuple as input for RIPlike 
     inputs = [(s,reference,args.window,args.step,args.nrep,False) for s in sequences]
@@ -652,100 +747,14 @@ def main():
     end_par1 = time.time()
     print('ProcessPoolExecutor: ', end_par1 -start_par1)
     
-    ####
+    # split results into alignments and 
     alignments = [tup[1] for tup in results]
     results = [tup[0] for tup in results]
-    ####
     
-    # define pure subtypes
-    pure_subtypes = ['A1','A2','A3','A4','A5','A6','A7','A8',
-                     'B','C','D','F1','F2','G','H','J','K','L',
-                     'N','O','P']
+    # create reports(best matches, coverages, bootstrap supports) 
+    # and collate new labels for query sequences
+    new_labels,found_labels,coverage,bootstrap,alignment_coverage = relabel(sequences,ids,alignments,results,args.window) 
     
-    
-    # define auxiliary variables
-    new_labels = []
-    found_labels = []
-    coverage = []
-    bootstrap = []
-    alignment_coverage = []
-    seq_counter = 0
-    start_report = time.time()
-    
-    # variables to keep track of 'true' 
-    # and 'false' found subtypes
-    true_subtype_counter = 0
-    false_subtype_counter = 0
-    true_recombinant_counter = 0
-    false_recombinant_counter = 0
-    
-    # 
-    for s,h,alignment,result in zip(sequences,ids,alignments,results):
-        # get original subtype of sample
-        sample_subtype = h.split(".")[0]
-        #
-        bm,bm_cov,bm_al_cov,bm_bs,om,om_cov,om_al_cov,om_bs = create_report(h,result,alignment,window=args.window) 
-        # if instance is labeled as recombinant
-        # keep label -> RIPlike not suited for exact recombinant detection 
-        if sample_subtype not in pure_subtypes:
-            new_labels.append(sample_subtype)
-            found_labels.append(','.join([bm]+om))
-            #
-            coverage.append(','.join([str(omc) for omc in om_cov]))
-            bootstrap.append(','.join([str(ombs) for ombs in om_bs]))
-            alignment_coverage.append(','.join([str(omac) for omac in om_al_cov]))
-        else:
-            # if major match was found, add new label
-            if bm:
-                new_labels.append(bm) 
-                found_labels.append(','.join([bm]+om))   
-                # add coverage and bootstrap support
-                coverage.append(bm_cov)
-                bootstrap.append(bm_bs)
-                alignment_coverage.append(bm_al_cov)
-            # else add found subtypes
-            else:
-                #
-                #new_labels.append(','.join(om))
-                ####
-                new_labels.append('_'.join(om))
-                ####
-                
-                found_labels.append(','.join(om))
-                coverage.append(','.join([str(omc) for omc in om_cov]))
-                bootstrap.append(','.join([str(ombs) for ombs in om_bs]))
-                alignment_coverage.append(','.join([str(omac) for omac in om_al_cov]))
-                
-        if sample_subtype in pure_subtypes:
-            if bm:
-                print(f'Best match: {bm}, Subtype: {sample_subtype}')
-                print('True subtype')
-                true_subtype_counter += 1
-            else:
-                print(f'other_matches: {om}, Recombinant: {sample_subtype}')
-                print('False subtype')
-                false_subtype_counter += 1
-        else:
-            if bm:
-                print(f'Best match: {bm}, Subtype: {sample_subtype}')
-                print('False recombinant')
-                false_recombinant_counter += 1
-            else:
-                print(f'other_matches: {om}, Recombinant: {sample_subtype}')
-                print('True recombinant')
-                true_recombinant_counter += 1
-        seq_counter += 1
-        print('====================================\n\n\n')  
-        if seq_counter % 10 == 0:
-            print('################################')
-            print(f'True Subtypes  {true_subtype_counter} of {true_subtype_counter+false_subtype_counter}')
-            print(f'True Recombinants  {true_recombinant_counter} of {true_recombinant_counter+false_recombinant_counter}')
-            print(f'check: {true_subtype_counter+false_recombinant_counter+false_subtype_counter+true_recombinant_counter} / {seq_counter}')
-            print('################################\n\n')     
-        #######
-    end_report = time.time()
-    
-    print('Report time: ',end_report-start_report)
     
     # write new metadata tsv file
     new_metadata_filename = f'{args.infile.split("_sequences")[0]}_metadata_relabeled.tsv'
