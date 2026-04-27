@@ -11,7 +11,7 @@ import logging
 import argparse
 import tempfile
 
-from poplars.common import convert_fasta, convert_clustal
+from common import convert_fasta, convert_clustal
 
 
 def align(query, reference, clustal=False):
