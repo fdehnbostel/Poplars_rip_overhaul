@@ -716,8 +716,11 @@ def main():
         ref_seq = args.custombg.name
     else:
         ref_seq_filename = 'HIV1_RIP_2023_genome_DNA_Mgroup_CONSandRegularIfNoCon_withNOP_noRecombinants.fasta'
-        ref_seq = os.path.join(os.getcwd(),'ref_genomes',ref_seq_filename)
-
+        #ref_seq = os.path.join(os.getcwd(),'ref_genomes',ref_seq_filename)
+        
+        seq_path = os.path.dirname(os.path.abspath(__file__))
+        ref_seq = os.path.join(seq_path,'ref_genomes',ref_seq_filename)
+                
     with open(ref_seq) as handle:
         reference = convert_fasta(handle)
     
