@@ -578,7 +578,7 @@ def fetch_metadata(infile,metadata_filepath,ids):
                                      'PANGEA-HIV','metadata')
     with open(os.path.join(metadata_filepath,metadata_file),'r') as metafile:
         lines = metafile.readlines()
-        for i,line in enumerate(lines[1:])
+        for i,line in enumerate(lines[1:]):
         #for i,line in enumerate(lines[1:11]):
             line_split = line.split('\t')
             country.append(line_split[1]) 
@@ -685,7 +685,7 @@ def relabel(sequences,ids,alignments,results,window):
     
     return(new_labels,found_labels,coverage,bootstrap,alignment_coverage)
 
-def main():
+def parse_args():
     parser = argparse.ArgumentParser(
         description='An approximate implementation of the Recombinant Identification '
                     'program by the Los Alamos National Laboratory.'
@@ -705,7 +705,13 @@ def main():
                         help='<optional> FASTA file to be used as the alignment background')
 
     args = parser.parse_args()
+    
+    return(args)
 
+def main():
+    
+    args = parse_args() 
+    
     if args.custombg:
         ref_seq = args.custombg.name
     else:
