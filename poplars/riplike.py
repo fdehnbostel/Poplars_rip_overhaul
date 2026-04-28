@@ -120,7 +120,11 @@ def hamming(bin_alignment):
             #                          else: False
             
             
-            if bool(nt1 & nt2) & ((nt1 | nt2) not in nts) | ((not nt1) | (not nt2)):
+            #if bool(nt1 & nt2) & ((nt1 | nt2) not in nts) | ((not nt1) | (not nt2)):
+            ###
+            # skip non-NT positions completely
+            if (nt1 not in nts) or (nt2 not in nts):
+            ###    
                 result.append(None)
                 continue
             # return 1 if mismatch
@@ -301,7 +305,8 @@ def riplike(inputs):
             n = len(best_seq)
             sample = random.choices(best_seq, k=n*nrep)
             for rep in range(nrep):
-                boot = sample[rep: rep + n]
+                #boot = sample[rep: rep + n]
+                boot = sample[rep*n: rep*n + n]
                 if sum(boot) / n < second_p:
                     count += 1
             quant = count / nrep
@@ -311,7 +316,7 @@ def riplike(inputs):
 
     return((results,alignment))
 
-def create_report_dicts(results,query_seq,n_windows,window=400,conf_thresh=0.7,min_len=10):
+def create_report_dicts(results,query_seq,n_windows,window,conf_thresh,min_len):
     # combine windows with same best match
     
     # used to calculate coverage of match relative to query  
@@ -400,7 +405,7 @@ def create_report_dicts(results,query_seq,n_windows,window=400,conf_thresh=0.7,m
             report_dicts[curr_report_dict['best_ref']].append(curr_report_dict)
             # keep track of valid windows
             sum_valid_windows += curr_report_dict['n_windows']
-
+    
     return(report_dicts,sum_valid_windows,windows_without_n)
     
 def get_best_matches(report_dicts,windows_without_n,pure_threshold=89):
@@ -476,7 +481,7 @@ def get_best_matches(report_dicts,windows_without_n,pure_threshold=89):
     return(best_match,best_match_coverage,best_match_alignment_coverage,best_match_avg_bs,
            other_matches,other_matches_coverage,other_match_alignment_coverage,other_matches_bs)    
     
-def create_report(query_name,results,alignment,window=400,step=1,conf_thresh=0.7,min_len=10,min_cov=1,min_bs=0.8):
+def create_report(query_name,results,alignment,window,step,conf_thresh,min_len,min_cov,min_bs):
     
     print('Parameters:')
     print(f'Bootstrap support threshold: {conf_thresh}')
@@ -492,8 +497,22 @@ def create_report(query_name,results,alignment,window=400,step=1,conf_thresh=0.7
     print('query_seq_len: ',len(query_seq))
     
     # aggregate best matching windows of same subtypes
-    report_dicts,sum_valid_windows,windows_without_n = create_report_dicts(results,query_seq,n_windows,window=window,
-                                                                           conf_thresh=conf_thresh,min_len=min_len)
+    report_dicts,sum_valid_windows,windows_without_n = create_report_dicts(results,query_seq,n_windows,
+                                                                           window,conf_thresh,min_len)
+    
+    """
+    ######
+    rep_dict_list_sorted = [val for key,rep_list in report_dicts.items() for val in rep_list]
+    rep_dict_list_sorted = sorted(rep_dict_list_sorted,key=lambda x: x['start'])
+    #print(rep_dict_list_sorted)
+    
+    with open('RIPlike_sorted_results.tsv','a') as compare_table:
+        compare_table.write(f'{query_name}\t\t\n')
+        compare_table.write('\tquery coords\tBest Match\n')
+        for rep_dict in rep_dict_list_sorted:
+            compare_table.write(f'\t({rep_dict["start"]},{rep_dict["end"]})\t{rep_dict["best_ref"]}\n')
+    ######
+    """
     
     print(f'windows_without_n: {windows_without_n}')
     print(f'Valid windows vs. all windows: {sum_valid_windows}/{n_windows}\n')
@@ -578,7 +597,7 @@ def fetch_metadata(infile,metadata_filepath,ids):
                                      'PANGEA-HIV','metadata')
     with open(os.path.join(metadata_filepath,metadata_file),'r') as metafile:
         lines = metafile.readlines()
-        for i,line in enumerate(lines[1:]):
+        for i,line in enumerate(lines[1:len(ids)+1]):
         #for i,line in enumerate(lines[1:11]):
             line_split = line.split('\t')
             country.append(line_split[1]) 
@@ -592,7 +611,7 @@ def fetch_metadata(infile,metadata_filepath,ids):
     print(f'corr_count:{corr_count}, sample_size:{len(ids)}' ) 
     return(country,partner,status,date,old_labels)   
     
-def relabel(sequences,ids,alignments,results,window):
+def relabel(sequences,ids,alignments,results,window=400,step=1,conf_thresh=0.7,min_len=10,min_cov=1.0,min_bs=0.8):
         
     # define pure subtypes
     pure_subtypes = ['A1','A2','A3','A4','A5','A6','A7','A8',
@@ -621,7 +640,9 @@ def relabel(sequences,ids,alignments,results,window):
         # get original subtype of sample
         sample_subtype = h.split(".")[0]
         # create report: get best
-        bm,bm_cov,bm_al_cov,bm_bs,om,om_cov,om_al_cov,om_bs = create_report(h,result,alignment,window=window) 
+        bm,bm_cov,bm_al_cov,bm_bs,om,om_cov,om_al_cov,om_bs = create_report(h,result,alignment,
+                                                                            window,step,conf_thresh,
+                                                                            min_len,min_cov,min_bs) 
         # if instance is labeled as recombinant
         # keep label -> RIPlike not suited for exact recombinant detection 
         if sample_subtype not in pure_subtypes:
@@ -643,10 +664,7 @@ def relabel(sequences,ids,alignments,results,window):
             # else add found subtypes
             else:
                 #
-                #new_labels.append(','.join(om))
-                ####
                 new_labels.append('_'.join(om))
-                ####
                 found_labels.append(','.join(om))
                 coverage.append(','.join([str(omc) for omc in om_cov]))
                 bootstrap.append(','.join([str(ombs) for ombs in om_bs]))
@@ -694,7 +712,7 @@ def parse_args():
                         help='<input> FASTA file containing sequences to process.')
     #parser.add_argument('outfile', type=str,#argparse.FileType('w'),
     #                    help='<output> file to write CSV results.')
-    parser.add_argument('-window', type=int, default=250,#250,#250,#400
+    parser.add_argument('-window', type=int, default=300,#250,#250,#400
                         help='<optional, int> Window size for p-distances.')
     parser.add_argument('-step', type=int, default=1,
                         # step size 1 is default in LANL RIP 3.0
@@ -703,8 +721,21 @@ def parse_args():
                         help='<optional, int> Number of bootstrap replicates.')
     parser.add_argument('-custombg', type=argparse.FileType('r'),
                         help='<optional> FASTA file to be used as the alignment background')
-
+    
+    parser.add_argument('-conf', type=float, default=0.7,
+                        help='<optional, int> Window size for p-distances.')
+    
+    parser.add_argument('-minlen', type=int, default=10,
+                        help='<optional, int> Window size for p-distances.')
+                        
+    parser.add_argument('-mincov', type=float, default=1.0,
+                        help='<optional, int> Window size for p-distances.')
+    
+    parser.add_argument('-minbs', type=float, default=0.8,
+                        help='<optional, int> Window size for p-distances.')
+                                            
     args = parser.parse_args()
+    
     
     return(args)
 
@@ -739,6 +770,7 @@ def main():
     ####
     #sequences = sequences[:10]
     #ids = ids[:10]
+    #print(ids[99])
     ####
     
     # define metadata filepath
@@ -763,7 +795,10 @@ def main():
     
     # create reports(best matches, coverages, bootstrap supports) 
     # and collate new labels for query sequences
-    new_labels,found_labels,coverage,bootstrap,alignment_coverage = relabel(sequences,ids,alignments,results,args.window) 
+    new_labels,found_labels,coverage,bootstrap,alignment_coverage = relabel(sequences,ids,alignments,results,
+                                                                            window=args.window,step=args.step,
+                                                                            conf_thresh=args.conf,min_len=args.minlen,
+                                                                            min_cov=args.mincov,min_bs=args.minbs) 
     
     
     # write new metadata tsv file
