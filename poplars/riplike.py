@@ -758,7 +758,7 @@ def main():
     
     # reading fasta input sequences file
     ## change infile
-    infile = os.path.join(curr_path,os.pardir,os.pardir,'Data',
+    infile = os.path.join(os.getcwd(),'Data',
                           'PANGEA-HIV','sequences',args.infile)
     handle = open(infile, 'r')
     
@@ -774,7 +774,7 @@ def main():
     ####
     
     # define metadata filepath
-    metadata_filepath = os.path.join(curr_path,os.pardir,os.pardir,'Data',
+    metadata_filepath = os.path.join(os.getcwd(),'Data',
                                      'PANGEA-HIV','metadata')
     # get metadata for PANGEA sequences                    
     country,partner,status,date,old_labels = fetch_metadata(args.infile,metadata_filepath,ids)
