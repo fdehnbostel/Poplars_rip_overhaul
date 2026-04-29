@@ -121,8 +121,10 @@ def hamming(bin_alignment):
             
             
             #if bool(nt1 & nt2) & ((nt1 | nt2) not in nts) | ((not nt1) | (not nt2)):
+            
             ###
-            # skip non-NT positions completely
+            # skip non-NT positions completely, as fraction of 
+            # ambiguous characters is negligible 
             if (nt1 not in nts) or (nt2 not in nts):
             ###    
                 result.append(None)
@@ -138,7 +140,10 @@ def hamming(bin_alignment):
     return results
 
 def create_con_of_cons(alignment):
-    
+    """
+    Currently not used. Gapstripping is performed on complete alignment,
+    and not just based on consensus of consensus (removal of insertions).
+    """
     # tie breaker
     tie_break_order = 'AGTC-N'
     
@@ -172,8 +177,10 @@ def create_con_of_cons(alignment):
     
 def update_alignment(seq, reference):
     """
-    Append query sequence <seq> to reference alignment and remove insertions relative to
-    global consensus sequence.
+    Append query sequence <seq> to reference alignment 
+    and remove gaps of alignment.
+    Removal of insertions relative to global consensus 
+    sequence is not performed.
     :param seq: the query sequence
     :param reference: the reference sequence
     :return: a list of [header, sequence] lists
@@ -195,7 +202,6 @@ def update_alignment(seq, reference):
     for h, s in alignment:
         s2 = [nt for i, nt in enumerate(s) if i not in skip_cols]
         gap_stripped_alignment.append([h, ''.join(s2)])
-    #print('Done\n')
     
     return gap_stripped_alignment
         
@@ -241,7 +247,8 @@ def riplike(inputs):
     # strip alignment from gaps
     alignment = update_alignment(seq, reference)
     
-    query = dict(alignment)['query']  # aligned query
+     # aligned query
+    query = dict(alignment)['query'] 
     seqlen = len(query)
     bin_alignment = encode(alignment)
     
@@ -305,7 +312,6 @@ def riplike(inputs):
             n = len(best_seq)
             sample = random.choices(best_seq, k=n*nrep)
             for rep in range(nrep):
-                #boot = sample[rep: rep + n]
                 boot = sample[rep*n: rep*n + n]
                 if sum(boot) / n < second_p:
                     count += 1
@@ -356,6 +362,7 @@ def create_report_dicts(results,query_seq,n_windows,window,conf_thresh,min_len):
         # count windows without Ns    
         windows_without_n += 1
         # if current and previous window match same reference
+        # and last window did not contain any Ns
         if r_dict['best_ref'] == curr_report_dict['best_ref'] and last_not_n:
             # add p-distance
             curr_report_dict['avg_pdist'] += r_dict['best_p']
