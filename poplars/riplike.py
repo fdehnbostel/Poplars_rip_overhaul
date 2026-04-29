@@ -593,7 +593,7 @@ def fetch_metadata(infile,metadata_filepath,ids):
     # define metadata file and path 
     metadata_file = f'{infile.split("_sequences")[0]}_metadata.tsv'
     # define path to metadata
-    metadata_filepath = os.path.join(os.getcwd(),os.pardir,os.pardir,'Data',
+    metadata_filepath = os.path.join(os.getcwd(),'Data',
                                      'PANGEA-HIV','metadata')
     with open(os.path.join(metadata_filepath,metadata_file),'r') as metafile:
         lines = metafile.readlines()
