@@ -534,6 +534,8 @@ def create_report(query_name,results,alignment,window,step,conf_thresh,min_len,m
     # sort other best matches by coverage
     sorted_indices = np.argsort(om_cov)[::-1]
     
+    #####
+    # only for info, can be removed
     if bm:
         print(f'Best match: {bm}')
         print(f'Query window coverage: {bm_cov}')
@@ -548,22 +550,6 @@ def create_report(query_name,results,alignment,window,step,conf_thresh,min_len,m
         for sort_ind in sorted_indices:
             # 
             if (om_cov[sort_ind]>min_cov) and (om_bs[sort_ind]>min_bs):
-                # if second best match indicates recombinant, 
-                # set best match variables to default
-                
-                #bm = False
-                ######
-                # got error with best_match initialized as False 
-                # if no subtype match was found
-                # found_labels.append(','.join([bm]+om))
-                # TypeError: sequence item 0: expected str instance, bool found#
-                bm = ''
-                #####
-                bm_cov = 0
-                bm_bs = 0
-                #
-                bm_al_cov = 0
-                #
                 print('Recombinant!')
         # if no other match was found
         if bm:
@@ -575,7 +561,9 @@ def create_report(query_name,results,alignment,window,step,conf_thresh,min_len,m
         print(f'Bootstrap support: {om_bs}\n')
         print('Recombinant!')
     print('---------------------------\n\n')
-
+    # only for info, can be removed
+    #####
+    
     # sort other matches
     om_cov = [om_cov[ind] for ind in sorted_indices if om[ind]]
     om_bs = [om_bs[ind] for ind in sorted_indices if om[ind]]
@@ -586,44 +574,37 @@ def create_report(query_name,results,alignment,window,step,conf_thresh,min_len,m
     
     return(bm,bm_cov,bm_al_cov,bm_bs,om,om_cov,om_al_cov,om_bs)         
             
-def fetch_metadata(infile,metadata_filepath,ids):
-    # fetch id for pangea data, test
+def fetch_metadata(infile,ids):
     # collect data from metadata tsv file to 
     # write to updated/relabeled metadata file
-    country = []
-    partner = []
-    status = []
-    date = []
-    old_labels = []
-    corr_count = 0
-    
+    metadata_dict = {}
     # define metadata file and path 
     metadata_file = f'{infile.split("_sequences")[0]}_metadata.tsv'
     # define path to metadata
     metadata_filepath = os.path.join(os.getcwd(),'Data',
                                      'PANGEA-HIV','metadata')
+    # read metadata file
     with open(os.path.join(metadata_filepath,metadata_file),'r') as metafile:
         lines = metafile.readlines()
-        for i,line in enumerate(lines[1:len(ids)+1]):
-        #for i,line in enumerate(lines[1:11]):
+        for i,line in enumerate(lines[1:]):
             line_split = line.split('\t')
-            country.append(line_split[1]) 
-            partner.append(line_split[2])
-            old_labels.append(line_split[3])
-            status.append(line_split[4])
-            date.append(line_split[5].replace('\n',''))
-            if line_split[0] == ids[i]:
-                ids[i] = f'{line_split[3]}.{ids[i]}'
-                corr_count += 1
-    print(f'corr_count:{corr_count}, sample_size:{len(ids)}' ) 
-    return(country,partner,status,date,old_labels)   
+            # if subtype is not supplied, add "Unknown" as label
+            subtype = line_split[3]
+            if not subtype:
+                subtype = 'Unknown'
+            # country, partner, status, date, subtype
+            if line_split[0] in ids:
+                metadata_dict[line_split[0]] = (line_split[1],line_split[2],line_split[4],line_split[5].replace('\n',''),subtype)
+
+    print(f'len(metadata_dict):{len(metadata_dict)}, sample_size:{len(ids)}' )     
+    return(metadata_dict)  
     
-def relabel(sequences,ids,alignments,results,window=400,step=1,conf_thresh=0.7,min_len=10,min_cov=1.0,min_bs=0.8):
+def relabel(sequences,ids,metadata_dict,alignments,results,window=400,step=1,conf_thresh=0.7,min_len=10,min_cov=1.0,min_bs=0.8):
         
     # define pure subtypes
     pure_subtypes = ['A1','A2','A3','A4','A5','A6','A7','A8',
                      'B','C','D','F1','F2','G','H','J','K','L',
-                     'N','O','P']
+                     'N','O','P','Unknown']
     
     
     # define auxiliary variables
@@ -633,7 +614,6 @@ def relabel(sequences,ids,alignments,results,window=400,step=1,conf_thresh=0.7,m
     bootstrap = []
     alignment_coverage = []
     seq_counter = 0
-    start_report = time.time()
     
     # variables to keep track of 'true' 
     # and 'false' found subtypes
@@ -642,10 +622,19 @@ def relabel(sequences,ids,alignments,results,window=400,step=1,conf_thresh=0.7,m
     true_recombinant_counter = 0
     false_recombinant_counter = 0
     
+    start_report = time.time()
     # 
     for s,h,alignment,result in zip(sequences,ids,alignments,results):
         # get original subtype of sample
-        sample_subtype = h.split(".")[0]
+        #sample_subtype = h.split(".")[0]
+
+        # test whether current id is present in metadata_dict
+        sample_subtype = metadata_dict.get(h,[False])[-1]
+
+        # if not, add entry with empty metadata
+        if not sample_subtype:
+            metadata_dict[h] = ('','','','','Unknown')
+
         # create report: get best
         bm,bm_cov,bm_al_cov,bm_bs,om,om_cov,om_al_cov,om_bs = create_report(h,result,alignment,
                                                                             window,step,conf_thresh,
@@ -656,27 +645,43 @@ def relabel(sequences,ids,alignments,results,window=400,step=1,conf_thresh=0.7,m
             new_labels.append(sample_subtype)
             found_labels.append(','.join([bm]+om))
             #
-            coverage.append(','.join([str(omc) for omc in om_cov]))
-            bootstrap.append(','.join([str(ombs) for ombs in om_bs]))
-            alignment_coverage.append(','.join([str(omac) for omac in om_al_cov]))
+            coverage.append(','.join([str(bm_cov)] + [str(omc) for omc in om_cov]))
+            bootstrap.append(','.join([str(bm_bs)] + [str(ombs) for ombs in om_bs]))
+            alignment_coverage.append(','.join([str(bm_al_cov)] + [str(omac) for omac in om_al_cov]))
         else:
-            # if major match was found, add new label
+            # if major match was found,
             if bm:
-                new_labels.append(bm) 
-                found_labels.append(','.join([bm]+om))   
-                # add coverage and bootstrap support
-                coverage.append(bm_cov)
-                bootstrap.append(bm_bs)
-                alignment_coverage.append(bm_al_cov)
+                # if any other match has
+                # a query coverage > min_cov (default: 1.0)
+                # and a bootstrap support > min_bs (default: 0.8)
+                # sample is considered recombinant
+                recombinant_indicated = False
+                for i in range(len(om_cov)):
+                    if (om_cov[i]>min_cov) and (om_bs[i]>min_bs):
+                        recombinant_indicated = True
+                if recombinant_indicated:
+                    new_labels.append('_'.join([bm]+om))
+                    found_labels.append(','.join([bm]+om)) 
+                    coverage.append(','.join([str(bm_cov)]+[str(omc) for omc in om_cov]))
+                    bootstrap.append(','.join([str(bm_bs)]+[str(ombs) for ombs in om_bs])) 
+                    alignment_coverage.append(','.join([str(bm_al_cov)]+[str(omac) for omac in om_al_cov]))
+                # otherwise, use best match to relabel sample
+                else:
+                    new_labels.append(bm) 
+                    found_labels.append(','.join([bm]+om))   
+                    # add coverage and bootstrap support
+                    coverage.append(bm_cov)
+                    bootstrap.append(bm_bs)
+                    alignment_coverage.append(bm_al_cov)
+                
             # else add found subtypes
             else:
-                #
                 new_labels.append('_'.join(om))
                 found_labels.append(','.join(om))
                 coverage.append(','.join([str(omc) for omc in om_cov]))
                 bootstrap.append(','.join([str(ombs) for ombs in om_bs]))
                 alignment_coverage.append(','.join([str(omac) for omac in om_al_cov]))
-                
+        #######        
         if sample_subtype in pure_subtypes:
             if bm:
                 print(f'Best match: {bm}, Subtype: {sample_subtype}')
@@ -730,16 +735,16 @@ def parse_args():
                         help='<optional> FASTA file to be used as the alignment background')
     
     parser.add_argument('-conf', type=float, default=0.7,
-                        help='<optional, int> Window size for p-distances.')
+                        help='<optional, float> Bootstrap support threshold for windows to be considered a match. Default: 0.7')
     
     parser.add_argument('-minlen', type=int, default=10,
-                        help='<optional, int> Window size for p-distances.')
+                        help='<optional, int> Minimum number of consecutive windows necessary to be considered a match. Default: 10')
                         
     parser.add_argument('-mincov', type=float, default=1.0,
-                        help='<optional, int> Window size for p-distances.')
+                        help='<optional, float> Query coverage in percentage of minor match necessary for sample to be considered recombinant. Default: 1.0')
     
     parser.add_argument('-minbs', type=float, default=0.8,
-                        help='<optional, int> Window size for p-distances.')
+                        help='<optional, int> Bootstrap support of minor match necessary for sample to be considered recombinant. Default: 0.8')
                                             
     args = parser.parse_args()
     
@@ -773,19 +778,14 @@ def main():
     # splitting sequences and IDs
     sequences = [tup[1] for tup in fasta]
     ids = [tup[0] for tup in fasta]
-    
-    ####
-    #sequences = sequences[:10]
-    #ids = ids[:10]
-    #print(ids[99])
-    ####
-    
+
     # define metadata filepath
     metadata_filepath = os.path.join(os.getcwd(),'Data',
                                      'PANGEA-HIV','metadata')
     # get metadata for PANGEA sequences                    
-    country,partner,status,date,old_labels = fetch_metadata(args.infile,metadata_filepath,ids)
-    
+    #country,partner,status,date,old_labels = fetch_metadata(args.infile,metadata_filepath,ids)
+    metadata_dict = fetch_metadata(args.infile,ids)
+
     # set up tuple as input for RIPlike 
     inputs = [(s,reference,args.window,args.step,args.nrep,False) for s in sequences]
     
@@ -802,7 +802,7 @@ def main():
     
     # create reports(best matches, coverages, bootstrap supports) 
     # and collate new labels for query sequences
-    new_labels,found_labels,coverage,bootstrap,alignment_coverage = relabel(sequences,ids,alignments,results,
+    new_labels,found_labels,coverage,bootstrap,alignment_coverage = relabel(sequences,ids,metadata_dict,alignments,results,
                                                                             window=args.window,step=args.step,
                                                                             conf_thresh=args.conf,min_len=args.minlen,
                                                                             min_cov=args.mincov,min_bs=args.minbs) 
@@ -813,7 +813,9 @@ def main():
     with open(os.path.join(metadata_filepath,new_metadata_filename), 'w') as outfile:
         outfile.write('sequence_id\tcountry\tpartner\tsubtype\tstatus\tdate\tfound_subtypes\tquery_coverage\talignment_coverage\tbootstrap\n')
         for i,nl in enumerate(new_labels):
-            outstring = f'{ids[i].split(".")[1]}\t{country[i]}\t{partner[i]}\t{nl}\t{status[i]}\t{date[i]}\t{found_labels[i]}\t{coverage[i]}\t{alignment_coverage[i]}\t{bootstrap[i]}\n'
+            #outstring = f'{ids[i].split(".")[1]}\t{country[i]}\t{partner[i]}\t{nl}\t{status[i]}\t{date[i]}\t{found_labels[i]}\t{coverage[i]}\t{alignment_coverage[i]}\t{bootstrap[i]}\n'
+            # country, partner, status, date, old_label
+            outstring = f'{ids[i]}\t{metadata_dict[ids[i]][0]}\t{metadata_dict[ids[i]][1]}\t{nl}\t{metadata_dict[ids[i]][2]}\t{metadata_dict[ids[i]][3]}\t{found_labels[i]}\t{coverage[i]}\t{alignment_coverage[i]}\t{bootstrap[i]}\n'
             outfile.write(outstring)
             
 
