@@ -488,7 +488,7 @@ def get_best_matches(report_dicts,windows_without_n,pure_threshold=89):
     return(best_match,best_match_coverage,best_match_alignment_coverage,best_match_avg_bs,
            other_matches,other_matches_coverage,other_match_alignment_coverage,other_matches_bs)    
     
-def create_report(query_name,results,alignment,window,step,conf_thresh,min_len,min_cov,min_bs):
+def create_report(query_name,query_subtype,results,alignment,window,step,conf_thresh,min_len,min_cov,min_bs):
     
     print('Parameters:')
     print(f'Bootstrap support threshold: {conf_thresh}')
@@ -525,7 +525,7 @@ def create_report(query_name,results,alignment,window,step,conf_thresh,min_len,m
     print(f'Valid windows vs. all windows: {sum_valid_windows}/{n_windows}\n')
     
     print(f'{query_name}' )
-    print(f'Subtype: {query_name.split(".")[0]}')
+    print(f'Subtype: {query_subtype}')
     
     
     # get best match and other best matches
@@ -636,9 +636,22 @@ def relabel(sequences,ids,metadata_dict,alignments,results,window=400,step=1,con
             metadata_dict[h] = ('','','','','Unknown')
 
         # create report: get best
-        bm,bm_cov,bm_al_cov,bm_bs,om,om_cov,om_al_cov,om_bs = create_report(h,result,alignment,
+        bm,bm_cov,bm_al_cov,bm_bs,om,om_cov,om_al_cov,om_bs = create_report(h,metadata_dict[h][-1],result,alignment,
                                                                             window,step,conf_thresh,
                                                                             min_len,min_cov,min_bs) 
+        """
+        possible cases:
+        label is recombinant: 
+            - keep recombinant label, as RIPlike is not meant for accurate recombination detection, add found subtypes (best match and other matches) as found labels
+        label is pure:
+            - best match (x) is found
+                -> other match (y,z) > 1% and >0.8 bs => label as recombinant (x_y_z), add x, y, z as found labels
+                -> no other match > 1% and >0.8 bs => label as pure with best match (x), add x, y, z as found labels
+            - no best match is found
+                -> more than one other match is found (y,z) => label as recombinant (y_z), add y, z as found labels
+                -> one or no other match is found (y) => label as Unknown, add y as found label
+        """
+        
         # if instance is labeled as recombinant
         # keep label -> RIPlike not suited for exact recombinant detection 
         if sample_subtype not in pure_subtypes:
@@ -670,17 +683,26 @@ def relabel(sequences,ids,metadata_dict,alignments,results,window=400,step=1,con
                     new_labels.append(bm) 
                     found_labels.append(','.join([bm]+om))   
                     # add coverage and bootstrap support
-                    coverage.append(bm_cov)
-                    bootstrap.append(bm_bs)
-                    alignment_coverage.append(bm_al_cov)
+                    coverage.append(','.join([str(bm_cov)]+[str(omc) for omc in om_cov]))
+                    bootstrap.append(','.join([str(bm_bs)]+[str(ombs) for ombs in om_bs]))
+                    alignment_coverage.append(','.join([str(bm_al_cov)]+[str(omac) for omac in om_al_cov]))
                 
-            # else add found subtypes
-            else:
+            # else, if other matches were found, add found subtypes
+            elif len(om)>1:
                 new_labels.append('_'.join(om))
                 found_labels.append(','.join(om))
                 coverage.append(','.join([str(omc) for omc in om_cov]))
                 bootstrap.append(','.join([str(ombs) for ombs in om_bs]))
                 alignment_coverage.append(','.join([str(omac) for omac in om_al_cov]))
+            # if no other matches were found, add Unknown as subtype
+            # and original label as found label
+            else:
+                new_labels.append('Unknown')
+                found_labels.append(','.join([sample_subtype]+om))
+                coverage.append(','.join(['']+om_cov))
+                bootstrap.append(','.join(['']+om_bs))
+                alignment_coverage.append(','.join(['']+om_al_cov))
+
         #######        
         if sample_subtype in pure_subtypes:
             if bm:
